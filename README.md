@@ -1,7 +1,7 @@
 <!--# `BigInteger.GreatestCommonDivisor()` の高速化の試み-->
 # Efforts to improve the speed of `BigInteger.GreatestCommonDivisor()`
 
-[[日本語](README_ja.md)] | [**English**]
+[[日本語](docs/README_ja.md)] | [**English**]
 
 <!--## 1. 概要-->
 ## 1. Overview
