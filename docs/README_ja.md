@@ -1,6 +1,6 @@
 # `BigInteger.GreatestCommonDivisor()` の高速化の試み
 
-[**日本語**] | [[English](README.md)]
+[**日本語**] | [[English](../README.md)]
 
 ## 1. 概要
 
@@ -122,7 +122,7 @@ public static uint GreatestCommonDivisor(this uint u, uint v)
 ## 5. 性能の比較
 
 .NET での性能と、前述のアルゴリズムを使用した修正版の性能の比較結果を以下に示す。
-### [測定結果]
+
 | データの<br/>ビット数 | .NETの場合 [msec] | 本稿の修正版 [msec] |
 |--:|--:|--:|
 | 8 | 0.000000 | 0.000000 |
