@@ -25,7 +25,7 @@
 アルゴリズムの説明のために、例として `uint` 型の整数の最大公約数を求めるサンプルプログラムを以下に示す。
 
 ```c#
-public static uint GreatestCommonDivisor(this uint u, uint v)
+public static uint GreatestCommonDivisor(uint u, uint v)
 {
     if (u == 0)
     {
