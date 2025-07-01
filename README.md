@@ -27,8 +27,9 @@ The Euclidean algorithm is well known and will not be discussed in this article.
 [準数値算法 算術演算](https://www.amazon.co.jp/%E6%BA%96%E6%95%B0%E5%80%A4%E7%AE%97%E6%B3%95%E2%80%95%E7%AE%97%E8%A1%93%E6%BC%94%E7%AE%97-art-computer-programming-4/dp/4781904262) (D. E. Knuth 著)
 にて紹介されているものに .NET 固有のビット操作 (`BitOperations.TrailingZeroCount(uint)`) を使用した改良を加えたものである。-->
 
-This paper implements an improved version of the algorithm presented in [The Art of Computer Programming Volume 2 - Seminumerical algorithms](https://en.wikipedia.org/wiki/The_Art_of_Computer_Programming) (Authored by D. E. Knuth).
-The improvement leverages .NET's built-in bit manipulation function, `BitOperations.TrailingZeroCount(uint)`. 
+This article implements an improved version of the algorithm introduced in *"Chapter 4 - Arithmetic"* of [The Art of Computer Programming Volume 2 - Seminumerical algorithms](https://en.wikipedia.org/wiki/The_Art_of_Computer_Programming) (author: D. E. Knuth).
+
+This improvement makes use of the .NET built-in bit manipulation function `BitOperations.TrailingZeroCount(uint)`.
 
 <!--このアルゴリズムでは **乗算/除算/剰余演算を必要としない**。-->
 This algorithm **does not require multiplication/division/modulus operations**.
@@ -37,7 +38,7 @@ This algorithm **does not require multiplication/division/modulus operations**.
 To explain the algorithm, below is a sample program that calculates the greatest common divisor of integers of type `uint`.
 
 ```c#
-public static uint GreatestCommonDivisor(this uint u, uint v)
+public static uint GreatestCommonDivisor(uint u, uint v)
 {
     if (u == 0)
     {
