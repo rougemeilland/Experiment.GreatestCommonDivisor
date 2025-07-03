@@ -54,7 +54,7 @@ public static uint GreatestCommonDivisor(uint u, uint v)
 
     if (v == 0)
     {
-        // If v is 0, then the greatest common divisor is equal to 0
+        // If v is 0, then the greatest common divisor is equal to u
         return u;
     }
 
@@ -173,19 +173,20 @@ Below is a comparison of the performance on .NET and a modified version using th
 修正版でのボトルネックとなる箇所を Visual Studio のパフォーマンスプロファイラで調べてみたところ、計算時間のネックとなっていたのは **減算** と **右シフト** であった。
 これらの箇所をポインタなどの `unsafe` コードを使用して書き換えてみたが、計算時間はほぼ変わらなかった。
 
-本稿で使用したアルゴリズムは剰余演算を使用していないため確かに高速ではあるが、しかしその代わりに集束が遅いようである。
+本稿で使用したアルゴリズムは剰余演算を使用していないため確かに高速ではあるが、しかしその代わりに収束が遅いようである。
 そのため、1024bit 程度以上のより桁数の長い整数ではかえって不利となるようである。
 -->
 For data of 32 bits or less, the time required for calculation was so short that it was not measurable.
 
 For data of 64 bits or more, the modified algorithm was superior, but as the number of bits increased, the .NET version (i.e., Euclidean algorithm) became superior.
 
+
+
 When I checked the bottlenecks in the modified version using the performance profiler in Visual Studio, I found that the bottlenecks in the calculation time were **subtraction** and **right shift**.
 I tried rewriting these parts using `unsafe` code such as pointers, but the calculation time was almost the same.
 
-The algorithm used in this paper is certainly fast because it does not use modulus arithmetic, but in return it seems to converge slowly.
-Therefore, it seems to be at a disadvantage when using integers with a longer number of digits than 1024 bits.
-
+The algorithm used in this paper is indeed fast because it does not use modular arithmetic, but it seems to converge slowly instead.
+Therefore, it seems to be at a disadvantage when using integers with longer digits than 1024 bits.
 
 <!--## 8. 追記-->
 ## 8. Supplements
