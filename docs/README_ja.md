@@ -145,3 +145,35 @@ public static uint GreatestCommonDivisor(uint u, uint v)
 
 本稿で使用したアルゴリズムは剰余演算を使用していないため確かに高速ではあるが、しかしその代わりに集束が遅いようである。
 そのため、1024bit 程度以上のより桁数の長い整数ではかえって不利となるようである。
+
+## 8. 追記
+
+### 2025-07-03
+
+1024程度同士の GCD の計算を行い、その経過中の u と v のビット数の差の分布を計測してみた。
+| u と v のビット数の差 | 全体に占める割合 |
+|:--|--:|
+|difference <= 0 bits| 13.61%|
+|difference <= 1 bits| 38.98%|
+|difference <= 2 bits| 59.55%|
+|difference <= 3 bits| 74.50%|
+|difference <= 4 bits| 84.57%|
+|difference <= 5 bits| 90.92%|
+|difference <= 6 bits| 94.76%|
+|difference <= 7 bits| 97.04%|
+|difference <= 8 bits| 98.36%|
+|difference <= 9 bits| 99.09%|
+|difference <= 10 bits| 99.50%|
+|difference <= 11 bits| 99.73%|
+|difference <= 12 bits| 99.85%|
+|difference <= 13 bits| 99.91%|
+|difference <= 14 bits| 99.95%|
+|difference <= 15 bits| 99.97%|
+|difference <= 16 bits| 99.99%|
+|difference <= 17 bits| 99.99%|
+|difference <= 18 bits| 99.99%|
+|difference <= 19 bits| 100.00%|
+
+この計測結果より、GCD を計算中の u と v のビット数の差はほとんどの場合が9ビット以内であり、2ビット以下であるケースが約6割を占めることがわかる。
+そのため、u と v のビット数の差が小さい場合での高速化手段を導入することが最も効果的であると思われる。
+
