@@ -41,7 +41,7 @@ public static uint GreatestCommonDivisor(uint u, uint v)
 
     if (v == 0)
     {
-        // If v is 0, then the greatest common divisor is equal to 0
+        // If v is 0, then the greatest common divisor is equal to u
         return u;
     }
 
@@ -143,7 +143,7 @@ public static uint GreatestCommonDivisor(uint u, uint v)
 修正版でのボトルネックとなる箇所を Visual Studio のパフォーマンスプロファイラで調べてみたところ、計算時間のネックとなっていたのは **減算** と **右シフト** であった。
 これらの箇所をポインタなどの `unsafe` コードを使用して書き換えてみたが、計算時間はほぼ変わらなかった。
 
-本稿で使用したアルゴリズムは剰余演算を使用していないため確かに高速ではあるが、しかしその代わりに集束が遅いようである。
+本稿で使用したアルゴリズムは剰余演算を使用していないため確かに高速ではあるが、しかしその代わりに収束が遅いようである。
 そのため、1024bit 程度以上のより桁数の長い整数ではかえって不利となるようである。
 
 ## 7. 追記
