@@ -1,5 +1,6 @@
-﻿#define OUTPUT_PERFORMANCE_LOG
+﻿//#define OUTPUT_PERFORMANCE_LOG
 //#define ANALYZE_PERFORMANCE
+#define ANALYZE_STATISTICS
 #define UNIT_TEST
 using System;
 using System.Buffers;
@@ -9,7 +10,20 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text;
+
+#if OUTPUT_PERFORMANCE_LOG && ANALYZE_PERFORMANCE
+#error OUTPUT_PERFORMANCE_LOG と ANALYZE_PERFORMANCE を同時に設定することはできません。
+#endif
+
+#if OUTPUT_PERFORMANCE_LOG && ANALYZE_STATISTICS
+#error OUTPUT_PERFORMANCE_LOG と ANALYZE_STATISTICS を同時に設定することはできません。
+#endif
+
+#if ANALYZE_PERFORMANCE && ANALYZE_STATISTICS
+#error ANALYZE_PERFORMANCE と ANALYZE_STATISTICS を同時に設定することはできません。
+#endif
 
 namespace Experiment.CUI
 {
@@ -19,8 +33,13 @@ namespace Experiment.CUI
         {
 #if UNIT_TEST
             BigIntegerCalculatorVer2.TestPrivateMethods();
+            BigIntegerCalculatorVer2_1.TestPrivateMethods();
             Test();
 #endif
+#if ANALYZE_STATISTICS
+            AnalyzeStatistics();
+#endif
+
 #if ANALYZE_PERFORMANCE
             CheckPerformance();
 #endif
@@ -34,6 +53,118 @@ namespace Experiment.CUI
             _ = Console.ReadLine();
 #endif
         }
+
+#if ANALYZE_STATISTICS
+        private static void AnalyzeStatistics()
+        {
+            const int LOOP_COUNT = 1000;
+            Span<uint> uBuffer = stackalloc uint[1024 / 32];
+            Span<uint> vBuffer = stackalloc uint[1024 / 32];
+            Span<uint> resultBuffer = stackalloc uint[1024 / 32];
+
+            using (var randomNumberGenerator = RandomNumberGenerator.Create())
+            {
+                BigIntegerCalculatorVer2_1.ClearStatistics();
+                var progressText = "";
+                ReportProgress(0, LOOP_COUNT, ref progressText);
+                for (var count = 0; count < LOOP_COUNT; ++count)
+                {
+                    GenerateData(randomNumberGenerator, uBuffer, vBuffer);
+                    CalculateGcdByVer2_1(uBuffer, vBuffer, resultBuffer);
+                    ReportProgress(count, LOOP_COUNT, ref progressText);
+                }
+
+                ReportProgress(LOOP_COUNT, LOOP_COUNT, ref progressText);
+                Console.WriteLine();
+            }
+
+            var statistics =
+                BigIntegerCalculatorVer2_1.EnumerateStatistics()
+                .Where(item => item.leftBitCount > 64 || item.rightBitCount > 64)
+                .Select(item => (difference: item.leftBitCount - item.rightBitCount, item.count))
+                .GroupBy(item => item.difference)
+                .Select(g => (difference: g.Key, count: g.Aggregate(0UL, (sum, item) => sum + item.count)))
+                .OrderByDescending(item => item.count)
+                .ToArray();
+            var counts = new ulong[1024];
+            counts.AsSpan().Clear();
+            foreach (var (difference, count) in statistics)
+            {
+                for (var index = difference; index < counts.Length; ++index)
+                    counts[index] += count;
+            }
+
+            var totalCount = statistics.Aggregate(0UL, (sum, item) => sum + item.count);
+            for (var index = 0; index < counts.Length; ++index)
+            {
+                var count = counts[index];
+                if (count < totalCount)
+                    Console.WriteLine($"|difference <= {index} bits| {(double)count / totalCount:P2}|");
+                if (count >= totalCount)
+                    break;
+            }
+
+            static void ReportProgress(int count, int totalCount, ref string progressText)
+            {
+                var newProgressText =$"{(double)count / totalCount:P2}" ;
+                if (progressText != newProgressText)
+                {
+                    progressText = newProgressText;
+                    Console.Write($"AnalyzeStatistics: {progressText}\r");
+                }
+            }
+
+            static void GenerateData(RandomNumberGenerator generator, Span< uint> left, Span<uint> right)
+            {
+                var u = GenerateRandomNumber(generator);
+                var v = GenerateRandomNumber(generator);
+
+                if (u > v)
+                {
+                    FromBigIntegerToUInt32Array(u, left);
+                    FromBigIntegerToUInt32Array(v, right);
+                }
+                else
+                {
+                    FromBigIntegerToUInt32Array(u, right);
+                    FromBigIntegerToUInt32Array(v, left);
+                }
+
+                static BigInteger GenerateRandomNumber(RandomNumberGenerator generator)
+                {
+                    Span<byte> tempBuffer = stackalloc byte[1024 / 8 + 1];
+                    var minimum = BigInteger.One << (1024 - 32);
+
+                    while (true)
+                    {
+                        generator.GetBytes(tempBuffer[..^1]);
+                        tempBuffer[^1] = 0;
+                        var number = new BigInteger(tempBuffer);
+                        if (number >= minimum)
+                            return number;
+                    }
+                }
+
+                static void FromBigIntegerToUInt32Array(BigInteger value, Span<uint> buffer)
+                {
+                    for (var index = 0; index < buffer.Length; ++index)
+                    {
+                        buffer[index] = (uint)(value & uint.MaxValue);
+                        value >>= 32;
+                    }
+
+                    if (value.Sign != 0)
+                        throw new Exception();
+                }
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            static void CalculateGcdByVer2_1(ReadOnlySpan<uint> left, ReadOnlySpan<uint> right, Span<uint> result)
+            {
+                BigIntegerCalculatorVer2_1.Gcd(left, right, result);
+            }
+        }
+#endif
 
         private static void EstimatePerformance()
         {
@@ -859,6 +990,140 @@ namespace Experiment.CUI
                     else if (c < 0)
                     {
                         BigIntegerCalculatorVer2.Gcd(right, left, result[..right.Length]);
+                        result[right.Length..].Clear();
+                    }
+                    else
+                    {
+                        left.CopyTo(result);
+                    }
+                }
+            }
+
+            var lengthOfResult = result.Length;
+            while (lengthOfResult > 0 && result[lengthOfResult - 1] == 0)
+                --lengthOfResult;
+            return lengthOfResult;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static int CalculateGcdByVer2_1(ReadOnlySpan<uint> left, ReadOnlySpan<uint> right, Span<uint> result)
+        {
+            if (left.Length == 0)
+            {
+                right.CopyTo(result);
+                if (result.Length > right.Length)
+                    result[right.Length..].Clear();
+            }
+            else if (left.Length == 1)
+            {
+                if (right.Length == 0)
+                {
+                    result[0] = left[0];
+                    if (result.Length > 1)
+                        result[1..].Clear();
+                }
+                else if (right.Length == 1)
+                {
+                    result[0] = BigIntegerCalculatorVer2_1.Gcd(left[0], right[0]);
+                    if (result.Length > 1)
+                        result[1..].Clear();
+                }
+                else if (Environment.Is64BitProcess && right.Length == 2)
+                {
+                    var rightValue = ((ulong)right[1] << 32) | right[0];
+                    var gcd = BigIntegerCalculatorVer2_1.Gcd(left[0], rightValue);
+                    var lowPart = (uint)gcd;
+                    var highPart = (uint)(gcd >> 32);
+                    result[0] = lowPart;
+                    if (highPart != 0)
+                        throw new Exception();
+                    if (result.Length > 1)
+                        result[1..].Clear();
+                }
+                else
+                {
+                    result[0] = BigIntegerCalculatorVer2_1.Gcd(right, left[0]);
+                    if (result.Length > 1)
+                        result[1..].Clear();
+                }
+            }
+            else if (Environment.Is64BitProcess && left.Length == 2)
+            {
+                if (right.Length == 0)
+                {
+                    result[0] = left[0];
+                    result[1] = left[1];
+                    if (result.Length > 2)
+                        result[2..].Clear();
+                }
+                else if (right.Length == 1)
+                {
+                    var leftValue = ((ulong)left[1] << 32) | left[0];
+                    var gcd = BigIntegerCalculatorVer2_1.Gcd(leftValue, right[0]);
+                    var lowPart = (uint)gcd;
+                    var highPart = (uint)(gcd >> 32);
+                    result[0] = lowPart;
+                    if (highPart != 0)
+                        throw new Exception();
+                    if (result.Length > 1)
+                        result[1..].Clear();
+                }
+                else if (right.Length == 2)
+                {
+                    var leftValue = ((ulong)left[1] << 32) | left[0];
+                    var rightValue = ((ulong)right[1] << 32) | right[0];
+                    var gcd = BigIntegerCalculatorVer2_1.Gcd(leftValue, rightValue);
+                    var lowPart = (uint)gcd;
+                    var highPart = (uint)(gcd >> 32);
+                    result[0] = lowPart;
+                    result[1] = highPart;
+                    if (result.Length > 2)
+                        result[2..].Clear();
+                }
+                else
+                {
+                    var c = CompareData(left, right);
+                    if (c > 0)
+                    {
+                        BigIntegerCalculatorVer2_1.Gcd(left, right, result[..left.Length]);
+                        result[left.Length..].Clear();
+                    }
+                    else if (c < 0)
+                    {
+                        BigIntegerCalculatorVer2_1.Gcd(right, left, result[..right.Length]);
+                        result[right.Length..].Clear();
+                    }
+                    else
+                    {
+                        left.CopyTo(result);
+                    }
+                }
+            }
+            else
+            {
+                if (right.Length == 0)
+                {
+                    left.CopyTo(result);
+                    if (result.Length > left.Length)
+                        result[left.Length..].Clear();
+                }
+                else if (right.Length == 1)
+                {
+                    result[0] = BigIntegerCalculatorVer2_1.Gcd(left, right[0]);
+                    if (result.Length > 1)
+                        result[1..].Clear();
+                }
+                else
+                {
+                    var c = CompareData(left, right);
+                    if (c > 0)
+                    {
+                        BigIntegerCalculatorVer2_1.Gcd(left, right, result[..left.Length]);
+                        result[left.Length..].Clear();
+                    }
+                    else if (c < 0)
+                    {
+                        BigIntegerCalculatorVer2_1.Gcd(right, left, result[..right.Length]);
                         result[right.Length..].Clear();
                     }
                     else
