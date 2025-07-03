@@ -185,3 +185,44 @@ I tried rewriting these parts using `unsafe` code such as pointers, but the calc
 
 The algorithm used in this paper is certainly fast because it does not use modulus arithmetic, but in return it seems to converge slowly.
 Therefore, it seems to be at a disadvantage when using integers with a longer number of digits than 1024 bits.
+
+
+<!--## 8. 追記-->
+## 8. Supplements
+
+### 2025-07-03
+
+<!--1024ビット程度の数同士の GCD の計算を行い、その経過中の u と v のビット数の差の分布を計測してみた。-->
+
+The experiment involved calculating the GCD of numbers approximately 1024 bits in length.  The difference in the number of bits between the intermediate variables u and v was recorded throughout the computation, and the distribution of these differences was analyzed.
+
+| Difference between number<br/> of bits in u and v | The ratio |
+|:--|--:|
+|difference = 0 bit| 13.61%|
+|difference <= 1 bit| 38.98%|
+|difference <= 2 bits| 59.55%|
+|difference <= 3 bits| 74.50%|
+|difference <= 4 bits| 84.57%|
+|difference <= 5 bits| 90.92%|
+|difference <= 6 bits| 94.76%|
+|difference <= 7 bits| 97.04%|
+|difference <= 8 bits| 98.36%|
+|difference <= 9 bits| 99.09%|
+|difference <= 10 bits| 99.50%|
+|difference <= 11 bits| 99.73%|
+|difference <= 12 bits| 99.85%|
+|difference <= 13 bits| 99.91%|
+|difference <= 14 bits| 99.95%|
+|difference <= 15 bits| 99.97%|
+|difference <= 16 bits| 99.99%|
+|difference <= 17 bits| 99.99%|
+|difference <= 18 bits| 99.99%|
+|difference <= 19 bits| 100.00%|
+
+<!--
+この計測結果より、GCD を計算中の u と v のビット数の差はほとんどの場合が9ビット以内であり、かつ2ビット以下であるケースが約6割を占めることがわかる。
+そのため、u と v のビット数の差が小さい場合での高速化手段を導入することが最も効果的であると思われる。
+-->
+
+These measurements show that in most cases the difference in the number of bits between u and v during GCD calculation is within 9 bits, and in about 60% of cases it is 2 bits or less.
+Therefore, it seems most effective to introduce speed-up measures for cases where the difference in the number of bits between u and v is small.
