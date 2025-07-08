@@ -1,25 +1,32 @@
 ﻿//#define LOG_DETAIL
-//#define ANALYZE_PERFORMANCE // パフォーマンスの分析をする
-#define RECORD_STATISTICS // 統計情報を記録する
+//#define RECORD_STATISTICS // 統計情報を記録する
 #define CAN_GET_CONFIGURATION // 定義済みシンボル情報を取得可能にする
-#define USE_GCD_UINT32_OVERLOAD_WITHIN_GCD_GCD_UINT64_IF_POSSIBLE // Gcd(ulong, ulong) のオーバーロードにおいて、可能であれば Gcd(uint, uint) を呼び出す
-#define USE_GCD_UINT32_OVERLOAD_WITHIN_GCD_SPAN_IF_POSSIBLE // Gcd(Span<uint>, ReadOnlySpan<uint>) のオーバーロードにおいて、可能であれば Gcd(uint, uint) を呼び出す
-#define USE_GCD_UINT64_OVERLOAD_WITHIN_GCD_SPAN_IF_POSSIBLE // Gcd(Span<uint>, ReadOnlySpan<uint>) のオーバーロードにおいて、可能であれば Gcd(ulong, ulong) を呼び出す
+#define USE_GCD_UINT32_OVERLOAD_WITHIN_GCD_GCD_UINT64_IF_POSSIBLE // GcdCore(ulong, ulong) のオーバーロードにおいて、可能であれば Gcd(uint, uint) を呼び出す
+#define USE_GCD_UINT32_OVERLOAD_WITHIN_GCD_SPAN_IF_POSSIBLE // GcdCore(Span<uint>, ReadOnlySpan<uint>) のオーバーロードにおいて、可能であれば Gcd(uint, uint) を呼び出す
+#define USE_GCD_UINT64_OVERLOAD_WITHIN_GCD_SPAN_IF_POSSIBLE // GcdCore(Span<uint>, ReadOnlySpan<uint>) のオーバーロードにおいて、可能であれば Gcd(ulong, ulong) を呼び出す
+#define USE_UNSAFE_CODE_AT_SHIFT_RIGHT // ShiftRight(Span<uint> value, int bitCount) において、unsafe コードを使用する
+//#define USE_UNSAFE_CODE_AT_SUBTRACT_SELF // SubtractSelf(Span<uint> left, ReadOnlySpan<uint> right) において、unsafe コードを使用する
+
 using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
-#if ANALYZE_PERFORMANCE && RECORD_STATISTICS
-#error ANALYZE_PERFORMANCE と RECORD_STATISTICS を同時に設定することはできません。
-#endif
-
 namespace Experiment.CUI
 {
     internal static partial class BigIntegerCalculatorVer2_1
     {
-#if RECORD_STATISTICS
+        [Flags]
+        private enum HardwareAcceleratorOption
+        {
+            ByDefault = UseVector128IfPossible | UseVector256IfPossible | UseVector512IfPossible,
+            None = 0b0,
+            UseVector128IfPossible = 0b1,
+            UseVector256IfPossible = 0b10,
+            UseVector512IfPossible = 0b100,
+        }
+
         private sealed class GcdBitCountsKey
             : IEquatable<GcdBitCountsKey>
         {
@@ -50,14 +57,11 @@ namespace Experiment.CUI
                 => HashCode.Combine(LeftBitCount, RightBitCount);
         }
 
-#endif
         private const int _BIT_COUNT_PER_UINT32 = 32;
         private const int _BIT_COUNT_MASK_FOR_UINT32 = 31;
         private const int _SHIFT_BIT_COUNT_PER_UINT32 = 5;
         private const int _STACKALLOC_THRESHOLD = 64;
-#if RECORD_STATISTICS
         private static readonly Dictionary<GcdBitCountsKey, ulong> _statistics = [];
-#endif
 
         static BigIntegerCalculatorVer2_1()
         {
@@ -96,7 +100,6 @@ namespace Experiment.CUI
         }
 #endif
 
-#if RECORD_STATISTICS
         public static void ClearStatistics() => _statistics.Clear();
 
         public static IEnumerable<(int leftBitCount, int rightBitCount, ulong count)> EnumerateStatistics()
@@ -104,11 +107,37 @@ namespace Experiment.CUI
             foreach (var item in _statistics)
                 yield return (item.Key.LeftBitCount, item.Key.RightBitCount, item.Value);
         }
-#endif
 
-#if RECORD_STATISTICS
-
-#endif
+        [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.AggressiveOptimization)]
+        public static void TryToShiftRight(int type, Span<uint> buffer, int bitCount)
+        {
+            switch (type)
+            {
+                case 0:
+                    ShiftRightTry0(buffer, bitCount);
+                    break;
+                case 1:
+                    ShiftRightTry1(buffer, bitCount);
+                    break;
+                case 2:
+                    ShiftRightTry2(buffer, bitCount, HardwareAcceleratorOption.ByDefault);
+                    break;
+                case 3:
+                    ShiftRightTry2(buffer, bitCount, HardwareAcceleratorOption.None);
+                    break;
+                case 4:
+                    ShiftRightTry2(buffer, bitCount, HardwareAcceleratorOption.UseVector128IfPossible);
+                    break;
+                case 5:
+                    ShiftRightTry2(buffer, bitCount, HardwareAcceleratorOption.UseVector256IfPossible);
+                    break;
+                case 6:
+                    ShiftRightTry2(buffer, bitCount, HardwareAcceleratorOption.UseVector512IfPossible);
+                    break;
+                default:
+                    throw new Exception();
+            }
+        }
 
         #region Gcd
 
@@ -147,11 +176,7 @@ namespace Experiment.CUI
             return GcdCore(left, right);
         }
 
-#if ANALYZE_PERFORMANCE
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         public static uint Gcd(ReadOnlySpan<uint> left, uint right)
         {
             Assert(left.Length >= 1);
@@ -186,11 +211,7 @@ namespace Experiment.CUI
             }
         }
 
-#if ANALYZE_PERFORMANCE
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         public static void Gcd(ReadOnlySpan<uint> left, ReadOnlySpan<uint> right, Span<uint> result)
         {
             Assert(left.Length >= 2 && right.Length >= 2);
@@ -222,125 +243,39 @@ namespace Experiment.CUI
             }
         }
 
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static uint GcdCore(uint left, uint right)
         {
             Assert(left > 0 && right > 0);
 
-            var k = 0;
+            var trailingZeroCountOfLeft = BitOperations.TrailingZeroCount(left);
+            var trailingZeroCountOfRight = BitOperations.TrailingZeroCount(right);
+            left >>= trailingZeroCountOfLeft;
+            right >>= trailingZeroCountOfRight;
+            var k = Min(trailingZeroCountOfLeft, trailingZeroCountOfRight);
 
-            {
-                var zeroBitCount = Min(BitOperations.TrailingZeroCount(left), BitOperations.TrailingZeroCount(right));
-                left >>= zeroBitCount;
-                right >>= zeroBitCount;
-                k += zeroBitCount;
-            }
+            Assert(left > 0 && right > 0 && uint.IsOddInteger(left) && uint.IsOddInteger(right));
 
-            Assert(left > 0 && right > 0 && (uint.IsOddInteger(left) || uint.IsOddInteger(right)));
-
-            left >>= BitOperations.TrailingZeroCount(left);
-            right >>= BitOperations.TrailingZeroCount(right);
-
-            while (true)
-            {
-#if LOG_DETAIL
-                System.Diagnostics.Debug.Write($"({left}, {right})=>");
-#endif
-                Assert(left > 0 && right > 0 && uint.IsOddInteger(left) && uint.IsOddInteger(right));
-
-                if (left == right)
-                {
-                    var result = left << k;
-#if LOG_DETAIL
-                    System.Diagnostics.Debug.WriteLine($"{result}");
-#endif
-                    return result;
-                }
-
-#if RECORD_STATISTICS
-                AddToStatistics(GetActualBitCount(left), GetActualBitCount(right));
-#endif
-
-                if (left < right)
-                    (right, left) = (left, right);
-
-                Assert(left > 0 && right > 0 && left > right && uint.IsOddInteger(left) && uint.IsOddInteger(right));
-
-                left -= right;
-
-                Assert(uint.IsEvenInteger(left));
-
-                left >>= BitOperations.TrailingZeroCount(left);
-            }
+            return GcdCoreForOddInteger(left, right) << k;
         }
 
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static ulong GcdCore(ulong left, ulong right)
         {
-            var k = 0;
+            Assert(left > 0 && right > 0);
 
-            {
-                var zeroBitCount = Min(BitOperations.TrailingZeroCount(left), BitOperations.TrailingZeroCount(right));
-                left >>= zeroBitCount;
-                right >>= zeroBitCount;
-                k += zeroBitCount;
-            }
+            var trailingZeroCountOfLeft = BitOperations.TrailingZeroCount(left);
+            var trailingZeroCountOfRight = BitOperations.TrailingZeroCount(right);
+            left >>= trailingZeroCountOfLeft;
+            right >>= trailingZeroCountOfRight;
+            var k = Min(trailingZeroCountOfLeft, trailingZeroCountOfRight);
 
-            Assert(left != 0 && ulong.Sign(right) > 0 && (ulong.IsOddInteger(left) || ulong.IsOddInteger(right)));
+            Assert(left > 0 && right > 0 && ulong.IsOddInteger(left) && ulong.IsOddInteger(right));
 
-            left >>= BitOperations.TrailingZeroCount(left);
-            right >>= BitOperations.TrailingZeroCount(right);
-
-            while (true)
-            {
-#if LOG_DETAIL
-                System.Diagnostics.Debug.Write($"({left}, {right})=>");
-#endif
-                Assert(left > 0 && right > 0 && ulong.IsOddInteger(left) && ulong.IsOddInteger(right));
-
-#if USE_GCD_UINT32_OVERLOAD_WITHIN_GCD_GCD_UINT64_IF_POSSIBLE
-                if (left <= uint.MaxValue && right <= uint.MaxValue)
-                    return (ulong)GcdCore((uint)left, (uint)right) << k;
-#endif
-                if (left == right)
-                {
-                    var result = left << k;
-#if LOG_DETAIL
-                    System.Diagnostics.Debug.WriteLine($"{result}");
-#endif
-                    return result;
-                }
-
-#if RECORD_STATISTICS
-                AddToStatistics(GetActualBitCount(left), GetActualBitCount(right));
-#endif
-
-                if (left < right)
-                    (right, left) = (left, right);
-
-                Assert(left > 0 && right > 0 && left > right && ulong.IsOddInteger(left) && ulong.IsOddInteger(right));
-
-                left -= right;
-
-                Assert(ulong.IsEvenInteger(left));
-
-                left >>= BitOperations.TrailingZeroCount(left);
-            }
+            return GcdCoreForOddInteger(left, right) << k;
         }
 
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static void GcdCore(Span<uint> left, Span<uint> right)
         {
             // Remember that the variable 'left' must hold the greatest common divisor (GCD) when the function returns.
@@ -350,29 +285,101 @@ namespace Experiment.CUI
             Assert(left.Length >= right.Length);
             Assert(Compare(left, right) >= 0);
 
-            var u = left[..GetActualWordLength(left)];
-            var v = right[..GetActualWordLength(right)];
+            var result = left;
 
-            Assert(u.Length > 0 && v.Length > 0);
+            var trailingZeroCountOfLeft = GetTrailingZeroBitCount(left);
+            var trailingZeroCountOfRight = GetTrailingZeroBitCount(right);
+            var k = Math.Min(trailingZeroCountOfLeft, trailingZeroCountOfRight);
 
-            var k = 0;
+            ShiftRight(left, trailingZeroCountOfLeft);
+            ShiftRight(right, trailingZeroCountOfRight);
 
+            left = left[..GetActualWordLength(left)];
+            right = right[..GetActualWordLength(right)];
+
+            Assert(left.Length > 0 && right.Length > 0 && IsOdd(left) && IsOdd(right));
+
+            GcdCoreForOddInteger(left, right, k, result);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static uint GcdCoreForOddInteger(uint u, uint v)
+        {
+            while (true)
             {
-                var zeroBitCount = int.Min(GetTrailingZeroBitCount(u), GetTrailingZeroBitCount(v));
-                ShiftRight(u, zeroBitCount);
-                ShiftRight(v, zeroBitCount);
-                k += zeroBitCount;
+#if LOG_DETAIL
+                System.Diagnostics.Debug.Write($"({u}, {v})=>");
+#endif
+                Assert(u > 0 && v > 0 && uint.IsOddInteger(u) && uint.IsOddInteger(v));
+
+                if (u == v)
+                {
+#if LOG_DETAIL
+                    System.Diagnostics.Debug.WriteLine($"{u}");
+#endif
+                    return u;
+                }
+
+#if RECORD_STATISTICS
+                AddToStatistics(GetActualBitCount(left), GetActualBitCount(right));
+#endif
+
+                if (u < v)
+                    (v, u) = (u, v);
+
+                Assert(u > 0 && v > 0 && u > v && uint.IsOddInteger(u) && uint.IsOddInteger(v));
+
+                u -= v;
+
+                Assert(uint.IsEvenInteger(u));
+
+                u >>= BitOperations.TrailingZeroCount(u);
             }
+        }
 
-            Assert(u.Length > 0 && v.Length > 0 && (IsOdd(u) || IsOdd(v)));
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static ulong GcdCoreForOddInteger(ulong u, ulong v)
+        {
+            while (true)
+            {
+#if LOG_DETAIL
+                System.Diagnostics.Debug.Write($"({u}, {b})=>");
+#endif
+                Assert(u > 0 && v > 0 && ulong.IsOddInteger(u) && ulong.IsOddInteger(v));
 
-            ShiftRight(u, GetTrailingZeroBitCount(u));
-            ShiftRight(v, GetTrailingZeroBitCount(v));
+#if USE_GCD_UINT32_OVERLOAD_WITHIN_GCD_GCD_UINT64_IF_POSSIBLE
+                if (u <= uint.MaxValue && v <= uint.MaxValue)
+                    return GcdCoreForOddInteger((uint)u, (uint)v);
+#endif
+                if (u == v)
+                {
+#if LOG_DETAIL
+                    System.Diagnostics.Debug.WriteLine($"{u}");
+#endif
+                    return u;
+                }
 
-            u = u[..GetActualWordLength(u)];
-            v = v[..GetActualWordLength(v)];
+#if RECORD_STATISTICS
+                AddToStatistics(GetActualBitCount(left), GetActualBitCount(right));
+#endif
 
-            Assert(u.Length > 0 && v.Length > 0 && IsOdd(u) && IsOdd(v));
+                if (u < v)
+                    (v, u) = (u, v);
+
+                Assert(u > 0 && v > 0 && u > v && ulong.IsOddInteger(u) && ulong.IsOddInteger(v));
+
+                u -= v;
+
+                Assert(ulong.IsEvenInteger(u));
+
+                u >>= BitOperations.TrailingZeroCount(u);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static void GcdCoreForOddInteger(Span<uint> u, Span<uint> v, int k, Span<uint> r)
+        {
+            // Note that either u or v may be memory shared with r.
 
             while (true)
             {
@@ -394,26 +401,27 @@ namespace Experiment.CUI
                             if (v.Length == 2)
                             {
                                 var gcd =
-                                    GcdCore(
+                                    GcdCoreForOddInteger(
                                         ((ulong)u[1] << _BIT_COUNT_PER_UINT32) | u[0],
                                         ((ulong)v[1] << _BIT_COUNT_PER_UINT32) | v[0]);
                                 Span<uint> resultBuffer = [(uint)gcd, (uint)(gcd >> _BIT_COUNT_PER_UINT32)];
-                                ShiftLeft(resultBuffer, k, left);
+                                ShiftLeft(resultBuffer, k, r);
 #if LOG_DETAIL
-                                System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(left)}");
+                                System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(r)}");
 #endif
                                 return;
                             }
                             else
                             {
                                 var gcd =
-                                    GcdCore(
+                                    GcdCoreForOddInteger(
                                         ((ulong)u[1] << _BIT_COUNT_PER_UINT32) | u[0],
                                         v[0]);
-                                Span<uint> resultBuffer = [(uint)gcd, (uint)(gcd >> _BIT_COUNT_PER_UINT32)];
-                                ShiftLeft(resultBuffer, k, left);
+                                Assert(gcd <= uint.MaxValue);
+                                Span<uint> resultBuffer = [(uint)gcd];
+                                ShiftLeft(resultBuffer, k, r);
 #if LOG_DETAIL
-                                System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(left)}");
+                                System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(r)}");
 #endif
                                 return;
                             }
@@ -423,23 +431,24 @@ namespace Experiment.CUI
                             if (v.Length == 2)
                             {
                                 var gcd =
-                                    GcdCore(
+                                    GcdCoreForOddInteger(
                                         u[0],
                                         ((ulong)v[1] << _BIT_COUNT_PER_UINT32) | v[0]);
-                                Span<uint> resultBuffer = [(uint)gcd, (uint)(gcd >> _BIT_COUNT_PER_UINT32)];
-                                ShiftLeft(resultBuffer, k, left);
+                                Assert(gcd <= uint.MaxValue);
+                                Span<uint> resultBuffer = [(uint)gcd];
+                                ShiftLeft(resultBuffer, k, r);
 #if LOG_DETAIL
-                                System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(left)}");
+                                System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(r)}");
 #endif
                                 return;
                             }
                             else
                             {
-                                var gcd = GcdCore(u[0], v[0]);
+                                var gcd = GcdCoreForOddInteger(u[0], v[0]);
                                 Span<uint> resultBuffer = [gcd];
-                                ShiftLeft(resultBuffer, k, left);
+                                ShiftLeft(resultBuffer, k, r);
 #if LOG_DETAIL
-                                System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(left)}");
+                                System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(r)}");
 #endif
                                 return;
                             }
@@ -450,9 +459,9 @@ namespace Experiment.CUI
                 {
                     if (u.Length == 1 && v.Length == 1)
                     {
-                        var gcd = GcdCore(u[0], v[0]);
+                        var gcd = GcdCoreForOddInteger(u[0], v[0]);
                         Span<uint> resultBuffer = [gcd];
-                        ShiftLeft(resultBuffer, k, left);
+                        ShiftLeft(resultBuffer, k, r);
 #if LOG_DETAIL
                         System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(left)}");
 #endif
@@ -478,9 +487,9 @@ namespace Experiment.CUI
                 {
                     // If "u == v" then "GCD(left, right) == u << k".
 
-                    ShiftLeft(u, k, left);
+                    ShiftLeft(u, k, r);
 #if LOG_DETAIL
-                    System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(left)}");
+                    System.Diagnostics.Debug.WriteLine($"{ToFriendlyString(r)}");
 #endif
                     return;
                 }
@@ -511,11 +520,7 @@ namespace Experiment.CUI
 
         #region Utility methods
 
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static int Compare(ReadOnlySpan<uint> left, ReadOnlySpan<uint> right)
         {
             Assert(left.Length <= right.Length || left[right.Length..].ContainsAnyExcept(0u));
@@ -531,11 +536,7 @@ namespace Experiment.CUI
             return left[index] < right[index] ? -1 : 1;
         }
 
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static int GetActualWordLength(ReadOnlySpan<uint> value)
         {
             Assert(value.Length > 0);
@@ -550,33 +551,21 @@ namespace Experiment.CUI
             return 0;
         }
 
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static int GetActualBitCount(uint value)
         {
             Assert(value > 0);
             return _BIT_COUNT_MASK_FOR_UINT32 - BitOperations.LeadingZeroCount(value);
         }
 
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static int GetActualBitCount(ulong value)
         {
             Assert(value > 0);
             return _BIT_COUNT_MASK_FOR_UINT32 - BitOperations.LeadingZeroCount(value);
         }
 
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static int GetActualBitCount(ReadOnlySpan<uint> value)
         {
             Assert(value.Length > 0);
@@ -594,11 +583,7 @@ namespace Experiment.CUI
             return 0;
         }
 
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static int GetTrailingZeroBitCount(ReadOnlySpan<uint> value)
         {
             Assert(value.Length > 0);
@@ -617,25 +602,19 @@ namespace Experiment.CUI
         }
 
         // equivalent to "result = source << bitCount"
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static void ShiftLeft(ReadOnlySpan<uint> source, int bitCount, Span<uint> result)
         {
-            var lengthOfSource = source.Length;
-
-            Assert(lengthOfSource > 0);
+            Assert(source.Length > 0);
             Assert(result.Length > 0);
-            Assert(result.Length >= lengthOfSource);
+            Assert(result.Length >= source.Length);
             Assert(bitCount >= 0);
             Assert(bitCount <= result.Length * _BIT_COUNT_PER_UINT32);
 
             if (bitCount == 0)
             {
                 source.CopyTo(result);
-                result[lengthOfSource..].Clear();
+                result[source.Length..].Clear();
             }
             else
             {
@@ -659,10 +638,10 @@ namespace Experiment.CUI
                     // ...
                     // result[0] = 0;
 
-                    Assert(lengthOfSource + offset <= result.Length);
+                    Assert(source.Length + offset <= result.Length);
 
-                    result[(lengthOfSource + offset)..].Clear();
-                    source.CopyTo(result.Slice(offset, lengthOfSource));
+                    result[(source.Length + offset)..].Clear();
+                    source.CopyTo(result[offset..]);
                     result[..offset].Clear();
                 }
                 else
@@ -691,19 +670,19 @@ namespace Experiment.CUI
                     // ...
                     // result[0] = 0;
 
-                    Assert(lengthOfSource + offset <= result.Length);
+                    Assert(source.Length + offset <= result.Length);
 
-                    if (lengthOfSource + offset < result.Length)
+                    if (source.Length + offset < result.Length)
                     {
-                        result[(lengthOfSource + offsetPlusOne)..].Clear();
-                        result[lengthOfSource + offset] = source[^1] >> rightShiftCount;
+                        result[(source.Length + offsetPlusOne)..].Clear();
+                        result[source.Length + offset] = source[^1] >> rightShiftCount;
                     }
                     else
                     {
                         Assert((source[^1] >> rightShiftCount) == 0);
                     }
 
-                    for (var index = lengthOfSource - 2; index >= 0; --index)
+                    for (var index = source.Length - 2; index >= 0; --index)
                         result[index + offsetPlusOne] = (source[index + 1] << leftShiftCount) | (source[index] >> rightShiftCount);
                     result[offset] = source[0] << leftShiftCount;
                     result[..offset].Clear();
@@ -712,12 +691,104 @@ namespace Experiment.CUI
         }
 
         // equivalent to "value >>= bitCount"
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
         private static void ShiftRight(Span<uint> value, int bitCount)
+        {
+#if DEBUG
+            var v = value.ToBigInteger();
+            if (v.Sign == 0)
+                throw new Exception();
+            var vs = value.ToFormattedString();
+#endif
+            if (value.Length < 4) // < 128bit
+                ShiftRightTry1(value, bitCount);
+            else if (value.Length < 5) // < 160bit
+                ShiftRightTry2(value, bitCount, HardwareAcceleratorOption.None);
+            else if (value.Length < 8) // < 256bit
+                ShiftRightTry2(value, bitCount, HardwareAcceleratorOption.UseVector128IfPossible);
+            else if (value.Length < 16) // < 512bit
+                ShiftRightTry2(value, bitCount, HardwareAcceleratorOption.UseVector128IfPossible | HardwareAcceleratorOption.UseVector256IfPossible);
+            else
+                ShiftRightTry2(value, bitCount, HardwareAcceleratorOption.UseVector128IfPossible | HardwareAcceleratorOption.UseVector256IfPossible | HardwareAcceleratorOption.UseVector512IfPossible);
+#if DEBUG
+            var r = value.ToBigInteger();
+            if (r.Sign == 0)
+                throw new Exception();
+            var rs = value.ToFormattedString();
+            if (r != (v >> bitCount))
+                throw new Exception($"ShiftRight({vs}, {bitCount}) => {rs}");
+#endif
+        }
+
+        // equivalent to "left -= right << (wordCountOfShift * 32)"
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static void SubtractSelf(Span<uint> left, ReadOnlySpan<uint> right)
+            => SubtractSelfTry0(left, right);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static bool IsEven(ReadOnlySpan<uint> value)
+        {
+            Assert(value.Length > 0);
+
+            return (value[0] & 1) == 0;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static bool IsOdd(ReadOnlySpan<uint> value)
+        {
+            Assert(value.Length > 0);
+
+            return (value[0] & 1) != 0;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static int TrailingZeroCount(uint value)
+        {
+            Assert(value != 0); // Do not call TrailingZeroCount() for 0 because the return value of BitOperations.TrailingZeroCount() for 0 may be undefined on some processors.
+
+            return BitOperations.TrailingZeroCount(value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static int Min(int left, int right) => left < right ? left : right;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static bool IsZeroMostSignificantWord(ReadOnlySpan<uint> value)
+        {
+            Assert(value.Length > 0);
+
+            return value[^1] == 0u;
+        }
+
+        #endregion
+
+#if LOG_DETAIL
+        private static string ToFriendlyString(ReadOnlySpan<uint> value)
+        {
+            var result = BigInteger.Zero;
+            for (var index = value.Length - 1; index >= 0; --index)
+            {
+                result <<= _BIT_COUNT_PER_UINT32;
+                result |= value[index];
+            }
+
+            return result.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+#endif
+
+#if RECORD_STATISTICS
+        public static void AddToStatistics(int leftBitCount, int rightBitCount)
+        {
+            var key = new GcdBitCountsKey(leftBitCount, rightBitCount);
+            if (!_statistics.TryGetValue(key, out var value))
+                value = 0;
+            _statistics[key] = value + 1;
+        }
+#endif
+
+        // equivalent to "value >>= bitCount"
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static void ShiftRightTry0(Span<uint> value, int bitCount)
         {
             Assert(value.Length > 0);
             Assert(bitCount >= 0);
@@ -768,21 +839,16 @@ namespace Experiment.CUI
                 // ...
                 // value[value.Length - 1] = 0;
 
-                var limit = value.Length - offset - 1;
-                for (var index = 0; index < limit; ++index)
+                for (var index = 0; index < value.Length - offset - 1; ++index)
                     value[index] = (value[index + offset] >> rightShiftCount) | (value[index + offset + 1] << leftShiftCount);
-                value[limit] = value[^1] >> rightShiftCount;
+                value[^(offset + 1)] = value[^1] >> rightShiftCount;
                 value[^offset..].Clear();
             }
         }
 
         // equivalent to "left -= right << (wordCountOfShift * 32)"
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
-        private static void SubtractSelf(Span<uint> left, ReadOnlySpan<uint> right)
+        private static void SubtractSelfTry0(Span<uint> left, ReadOnlySpan<uint> right)
         {
             Assert(left.Length > 0);
             Assert(right.Length > 0);
@@ -816,87 +882,5 @@ namespace Experiment.CUI
 
             Assert(borrow == 0);
         }
-
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
-        private static bool IsEven(ReadOnlySpan<uint> value)
-        {
-            Assert(value.Length > 0);
-
-            return (value[0] & 1) == 0;
-        }
-
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
-        private static bool IsOdd(ReadOnlySpan<uint> value)
-        {
-            Assert(value.Length > 0);
-
-            return (value[0] & 1) != 0;
-        }
-
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
-        private static int TrailingZeroCount(uint value)
-        {
-            Assert(value != 0); // Do not call TrailingZeroCount() for 0 because the return value of BitOperations.TrailingZeroCount() for 0 may be undefined on some processors.
-
-            return BitOperations.TrailingZeroCount(value);
-        }
-
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
-        private static int Min(int left, int right) => left < right ? left : right;
-
-#if ANALYZE_PERFORMANCE
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#else
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-#endif
-        private static bool IsZeroMostSignificantWord(ReadOnlySpan<uint> value)
-        {
-            Assert(value.Length > 0);
-
-            return value[^1] == 0u;
-        }
-
-        #endregion
-
-#if LOG_DETAIL
-        private static string ToFriendlyString(ReadOnlySpan<uint> value)
-        {
-            var result = BigInteger.Zero;
-            for (var index = value.Length - 1; index >= 0; --index)
-            {
-                result <<= _BIT_COUNT_PER_UINT32;
-                result |= value[index];
-            }
-
-            return result.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        }
-#endif
-
-#if RECORD_STATISTICS
-        public static void AddToStatistics(int leftBitCount, int rightBitCount)
-        {
-            var key = new GcdBitCountsKey(leftBitCount, rightBitCount);
-            if (!_statistics.TryGetValue(key, out var value))
-                value = 0;
-            _statistics[key] = value + 1;
-        }
-#endif
-
     }
 }

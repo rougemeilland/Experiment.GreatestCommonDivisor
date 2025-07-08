@@ -6,11 +6,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnforceCodeStyleInBuild>True</EnforceCodeStyleInBuild>
-    <PublishTrimmed>True</PublishTrimmed>
-    <Trimming>full</Trimming>
     <TieredCompilationQuickJit>false</TieredCompilationQuickJit>
-    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
-    <PublishAot>True</PublishAot>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
 
@@ -31,31 +27,67 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Update="test-data-for-performance-1024bit.txt">
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.2" />
+    <PackageReference Include="BenchmarkDotNet.Annotations" Version="0.15.2" />
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
+    <PackageReference Include="Gee.External.Capstone" Version="2.3.0" />
+    <PackageReference Include="Iced" Version="1.21.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.14.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.621003" />
+    <PackageReference Include="Microsoft.Diagnostics.Runtime" Version="3.1.512801" />
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.22" />
+    <PackageReference Include="Microsoft.DotNet.PlatformAbstractions" Version="3.1.6" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.6" />
+    <PackageReference Include="Perfolizer" Version="0.5.3" />
+    <PackageReference Include="System.CodeDom" Version="9.0.6" />
+    <PackageReference Include="System.Collections.Immutable" Version="9.0.6" />
+    <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="9.0.6" />
+    <PackageReference Include="System.IO.Pipelines" Version="9.0.6" />
+    <PackageReference Include="System.Management" Version="9.0.6" />
+    <PackageReference Include="System.Reflection.Metadata" Version="9.0.6" />
+    <PackageReference Include="System.Reflection.TypeExtensions" Version="4.7.0" />
+    <PackageReference Include="System.Text.Encodings.Web" Version="9.0.6" />
+    <PackageReference Include="System.Text.Json" Version="9.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="TestData\test-data-for-performance-1024bit.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="test-data-for-performance-128bit.txt">
+    <None Update="TestData\test-data-for-performance-128bit.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="test-data-for-performance-16bit.txt">
+    <None Update="TestData\test-data-for-performance-16bit.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="test-data-for-performance-256bit.txt">
+    <None Update="TestData\test-data-for-performance-2048bit.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="test-data-for-performance-32bit.txt">
+    <None Update="TestData\test-data-for-performance-256bit.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="test-data-for-performance-512bit.txt">
+    <None Update="TestData\test-data-for-performance-32bit.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="test-data-for-performance-64bit.txt">
+    <None Update="TestData\test-data-for-performance-4096bit.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="test-data-for-performance-8bit.txt">
+    <None Update="TestData\test-data-for-performance-512bit.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="test-data-for-unit-test.txt">
+    <None Update="TestData\test-data-for-performance-64bit.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="TestData\test-data-for-performance-8bit.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="TestData\test-data-for-unit-test.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

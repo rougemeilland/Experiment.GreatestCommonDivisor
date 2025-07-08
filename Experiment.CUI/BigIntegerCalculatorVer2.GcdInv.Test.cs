@@ -96,7 +96,7 @@ namespace Experiment.CUI
 
             public static void TestShiftLeft()
             {
-                var listOfBitCount = new[] { 0, 1, 31, 32, 33, 63, 64, 54 };
+                var listOfBitCount = new[] { 0, 1, 31, 32, 33, 63, 64, 65 };
                 var listOfWidth = new[] { 32, 64, 96 };
                 var listOfLeadingBit = new[] { "", "0", "1", "11", "111111111111111111111111111111", "1111111111111111111111111111111", "11111111111111111111111111111111", "111111111111111111111111111111111" };
                 var listOfResultLength = new int[] { 1, 2, 3, 4, 5 };
@@ -129,7 +129,7 @@ namespace Experiment.CUI
 
             public static void TestShiftRight()
             {
-                var listOfBitCount = new[] { 0, 1, 31, 32, 33, 63, 64, 54 };
+                var listOfBitCount = new[] { 0, 1, 31, 32, 33, 63, 64, 65 };
                 var listOfWidth = new[] { 32, 64, 96 };
                 var listOfLeadingBit = new[] { "", "1", $"{new string('0', 1)}1", $"{new string('0', 2)}1", $"{new string('0', 29)}1", $"{new string('0', 30)}1", $"{new string('0', 31)}1", $"{new string('0', 32)}1", $"{new string('0', 33)}1" };
 

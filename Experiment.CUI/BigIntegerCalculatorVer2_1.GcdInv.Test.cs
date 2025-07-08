@@ -41,7 +41,7 @@ namespace Experiment.CUI
                     var expected = GetExpected(left, right);
                     var actual = Compare(leftArray, rightArray);
                     if (!AreEqualSign(actual, expected))
-                        throw new Exception($"Test is failed.: Compare({FormatArray(leftArray)}, {FormatArray(rightArray)}), actual : {actual} expected : {expected}");
+                        throw new Exception($"Test is failed.: Compare({leftArray.ToFormattedString()}, {rightArray.ToFormattedString()}), actual : {actual} expected : {expected}");
                 }
 
                 static int GetExpected(string left, string right)
@@ -69,7 +69,7 @@ namespace Experiment.CUI
                     var expected = (bitLength + _BIT_COUNT_PER_UINT32 - 1) / _BIT_COUNT_PER_UINT32;
                     var actual = GetActualWordLength(valueArray);
                     if (actual != expected)
-                        throw new Exception($"Test is failed.: GetActualWordLength({FormatArray(valueArray)}), actual : {actual} expected : {expected}");
+                        throw new Exception($"Test is failed.: GetActualWordLength({valueArray.ToFormattedString()}), actual : {actual} expected : {expected}");
                 }
             }
 
@@ -90,13 +90,13 @@ namespace Experiment.CUI
                     var expected = tralingZeroBitCount;
                     var actual = GetTrailingZeroBitCount(valueArray);
                     if (actual != expected)
-                        throw new Exception($"Test is failed.: GetTrailingZeroBitCount({FormatArray(valueArray)}), actual : {actual} expected : {expected}");
+                        throw new Exception($"Test is failed.: GetTrailingZeroBitCount({valueArray.ToFormattedString()}), actual : {actual} expected : {expected}");
                 }
             }
 
             public static void TestShiftLeft()
             {
-                var listOfBitCount = new[] { 0, 1, 31, 32, 33, 63, 64, 54 };
+                var listOfBitCount = new[] { 0, 1, 31, 32, 33, 63, 64, 65 };
                 var listOfWidth = new[] { 32, 64, 96 };
                 var listOfLeadingBit = new[] { "", "0", "1", "11", "111111111111111111111111111111", "1111111111111111111111111111111", "11111111111111111111111111111111", "111111111111111111111111111111111" };
                 var listOfResultLength = new int[] { 1, 2, 3, 4, 5 };
@@ -114,10 +114,10 @@ namespace Experiment.CUI
                 {
                     var valueArray = ToArrayOfUInt32(value).Span;
                     var expected = GetExpected(value, bitcount, lengthOfResult).Span;
-                    var actual = new uint[lengthOfResult];
+                    var actual = new uint[lengthOfResult].AsSpan();
                     ShiftLeft(valueArray, bitcount, actual);
                     if (!AreEqual(actual, expected))
-                        throw new Exception($"Test is failed.: ShiftLeft({FormatArray(valueArray)}, {bitcount}), actual : {FormatArray(actual)} expected : {FormatArray(expected)}");
+                        throw new Exception($"Test is failed.: ShiftLeft({valueArray.ToFormattedString()}, {bitcount}), actual : {actual.ToFormattedString()} expected : {expected.ToFormattedString()}");
                 }
 
                 static ReadOnlyMemory<uint> GetExpected(string value, int bitCount, int lengthOfResult)
@@ -129,28 +129,31 @@ namespace Experiment.CUI
 
             public static void TestShiftRight()
             {
-                var listOfBitCount = new[] { 0, 1, 31, 32, 33, 63, 64, 54 };
+                var listOfBitCount = new[] { 0, 1, 30, 31, 32, 33, 62, 63, 64, 65 };
                 var listOfWidth = new[] { 32, 64, 96 };
-                var listOfLeadingBit = new[] { "", "1", $"{new string('0', 1)}1", $"{new string('0', 2)}1", $"{new string('0', 29)}1", $"{new string('0', 30)}1", $"{new string('0', 31)}1", $"{new string('0', 32)}1", $"{new string('0', 33)}1" };
+                var listOfOperator = Enumerable.Repeat(0, 7).ToArray();
+                var sourceOfLeadingBit = new[] { 1, 2, 30, 31, 32, 33 };
+                var listOfLeadingBit = sourceOfLeadingBit.Select(bitCount => new string('0', bitCount) + "1").Prepend("").ToArray();
 
                 var bitPattern = string.Concat(Enumerable.Repeat("011", 342))[..1024];
                 var testSet =
                     listOfBitCount
-                    .SelectMany(bitCount => listOfWidth, (bitcount, width) => (value: bitPattern[..width], bitcount))
-                    .SelectMany(item => listOfLeadingBit.Where(leadingBit => leadingBit.Length < item.value.Length), (item, leadingBit) => (value: $"{leadingBit}{item.value[leadingBit.Length..]}", item.bitcount))
-                    .Where(item => item.bitcount <= item.value.Length)
+                    .SelectMany(bitCount => listOfWidth, (bitCount, width) => (value: bitPattern[..width], bitCount))
+                    .SelectMany(item => listOfLeadingBit.Where(leadingBit => leadingBit.Length < item.value.Length), (item, leadingBit) => (value: $"{leadingBit}{item.value[leadingBit.Length..]}", item.bitCount))
+                    .Where(item => item.bitCount <= item.value.Length)
+                    .SelectMany(item => listOfOperator.Select(op => (item.value, item.bitCount, op)))
                     .ToArray();
 
-                foreach (var (value, bitcount) in testSet)
+                foreach (var (value, bitcount, op) in testSet)
                 {
                     var valueArray = ToArrayOfUInt32(value).Span;
                     var expected = GetExpected(value, bitcount).Span;
                     var actual = new uint[expected.Length].AsSpan();
                     actual.Clear();
                     valueArray.CopyTo(actual);
-                    ShiftRight(actual, bitcount);
+                    var operatorName = Execute(op, actual, bitcount);
                     if (!AreEqual(actual, expected))
-                        throw new Exception($"Test is failed.: ShiftRight({FormatArray(valueArray)}, {bitcount}), actual : {FormatArray(actual)} expected : {FormatArray(expected)}");
+                        throw new Exception($"Test is failed.: {operatorName}({valueArray.ToFormattedString()}, {bitcount}), actual : {actual.ToFormattedString()} expected : {expected.ToFormattedString()}");
                 }
 
                 static ReadOnlyMemory<uint> GetExpected(string value, int bitCount)
@@ -158,6 +161,36 @@ namespace Experiment.CUI
                     Assert(value.Length % 32 == 0);
                     var s = bitCount <= value.Length ? value[..^bitCount] : "";
                     return ToArrayOfUInt32($"{new string('0', value.Length - s.Length)}{s}");
+                }
+
+                static string Execute(int op, Span<uint> value, int bitCount)
+                {
+                    switch (op)
+                    {
+                        case 0:
+                            ShiftRightTry0(value, bitCount);
+                            return nameof(ShiftRightTry0);
+                        case 1:
+                            ShiftRightTry1(value, bitCount);
+                            return nameof(ShiftRightTry1);
+                        case 2:
+                            ShiftRightTry2(value, bitCount, HardwareAcceleratorOption.ByDefault);
+                            return nameof(ShiftRightTry2);
+                        case 3:
+                            ShiftRightTry2(value, bitCount, HardwareAcceleratorOption.None);
+                            return $"{nameof(ShiftRightTry2)}_{nameof(HardwareAcceleratorOption.None)}";
+                        case 4:
+                            ShiftRightTry2(value, bitCount, HardwareAcceleratorOption.UseVector128IfPossible);
+                            return $"{nameof(ShiftRightTry2)}_{nameof(HardwareAcceleratorOption.UseVector128IfPossible)}";
+                        case 5:
+                            ShiftRightTry2(value, bitCount, HardwareAcceleratorOption.UseVector256IfPossible);
+                            return $"{nameof(ShiftRightTry2)}_{nameof(HardwareAcceleratorOption.UseVector256IfPossible)}";
+                        case 6:
+                            ShiftRightTry2(value, bitCount, HardwareAcceleratorOption.UseVector512IfPossible);
+                            return $"{nameof(ShiftRightTry2)}_{nameof(HardwareAcceleratorOption.UseVector512IfPossible)}";
+                        default:
+                            throw new Exception();
+                    }
                 }
             }
 
@@ -179,7 +212,7 @@ namespace Experiment.CUI
                     var valueArray = ToArrayOfUInt32(value).Span;
                     var actual = IsEven(valueArray);
                     if (actual != expected)
-                        throw new Exception($"Test is failed.: IsEven({FormatArray(valueArray)}), actual : {actual} expected : {expected}");
+                        throw new Exception($"Test is failed.: IsEven({valueArray.ToFormattedString()}), actual : {actual} expected : {expected}");
                 }
             }
 
@@ -201,34 +234,8 @@ namespace Experiment.CUI
                     var valueArray = ToArrayOfUInt32(value).Span;
                     var actual = IsOdd(valueArray);
                     if (actual != expected)
-                        throw new Exception($"Test is failed.: IsOdd({FormatArray(valueArray)}), actual : {actual} expected : {expected}");
+                        throw new Exception($"Test is failed.: IsOdd({valueArray.ToFormattedString()}), actual : {actual} expected : {expected}");
                 }
-            }
-
-            private static BigInteger ToBigInteger(ReadOnlySpan<uint> value)
-            {
-                var result = BigInteger.Zero;
-                for (var index = value.Length - 1; index >= 0; --index)
-                {
-                    result <<= 32;
-                    result |= value[index];
-                }
-
-                return result;
-            }
-
-            private static ReadOnlyMemory<uint> ToArrayOfUInt32(BigInteger value)
-            {
-                if (value.Sign < 0)
-                    throw new Exception();
-                var result = new List<uint>();
-                while (value.Sign != 0)
-                {
-                    result.Add((uint)(value & uint.MaxValue));
-                    value >>= 32;
-                }
-
-                return result.ToArray();
             }
 
             private static ReadOnlyMemory<uint> ToArrayOfUInt32(string s)
@@ -318,14 +325,6 @@ namespace Experiment.CUI
                     return expected < 0;
                 else
                     return expected == 0;
-            }
-
-            private static string FormatArray(ReadOnlySpan<uint> value)
-            {
-                var valueTexts = new List<string>();
-                for (var index = 0; index < value.Length; ++index)
-                    valueTexts.Add($"0x{value[index]:x8}");
-                return $"[{string.Join(", ", valueTexts)}]";
             }
         }
 
